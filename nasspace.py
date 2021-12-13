@@ -23,7 +23,7 @@ class Nasbench201:
     def get_network(self, uid):
         #config = self.api.get_net_config(uid, self.dataset)
         config = self.api.get_net_config(uid, 'cifar10-valid')
-        config['num_classes'] = 1
+        config['num_classes'] = 10
         network = get_cell_based_tiny_net(config)
         return network
     def __iter__(self):
