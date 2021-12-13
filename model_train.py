@@ -16,10 +16,12 @@ from utils import add_dropout, init_network
 import wandb
 
 
-wandb_project = "Score_trail"
-searched = [1, 3]
-user_list = [0, 1, 2, 3, 4]
-for user in user_list:
+
+
+
+
+def main_func(user, searched):
+    wandb_project = "Score_trail"
     parser = argparse.ArgumentParser(description='NAS Without Training')
     parser.add_argument('--data_loc', default='../cifardata/', type=str, help='dataset folder')
     parser.add_argument('--api_loc', default='../NAS-Bench-201-v1_0-e61699.pth', type=str, help='path to API')
@@ -83,7 +85,7 @@ for user in user_list:
         val_acc_type = 'x-valid'
     scores = np.zeros(len(searchspace))
     for i, (uid, network) in enumerate(searchspace):
-        if i in searched:
+        if i == searched:
 
             run_name = "User{}_model{}".format(user, i)
             wandb.init(project=wandb_project, name = run_name)
@@ -218,3 +220,10 @@ for user in user_list:
         #     print(e)
         #     accs[i] = searchspace.get_final_accuracy(uid, acc_type, args.trainval)
         #     scores[i] = np.nan
+
+if __name__ == '__main__':
+    user_list = [1, 2, 3, 4]
+    searched = [1,3]
+    for user in user_list:
+        main_func(user, searched[0])
+        main_func(user, searched[1])
