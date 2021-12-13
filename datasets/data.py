@@ -61,7 +61,7 @@ def get_data(dataset, data_loc, trainval, batch_size, augtype, repeat, user, arg
                                                        num_workers=0, pin_memory=pin_memory,
                                                        sampler=torch.utils.data.sampler.SubsetRandomSampler(
                                                            user_data[user]['train']), )
-            test_loader = torch.utils.data.DataLoader(valid_data, batch_size=len(user_data[user]['test']), #shuffle=True,
+            test_loader = torch.utils.data.DataLoader(valid_data, batch_size=batch_size, #shuffle=True,
                                                        num_workers=0, pin_memory=pin_memory,
                                                        sampler=torch.utils.data.sampler.SubsetRandomSampler(
                                                            user_data[user]['test']), )

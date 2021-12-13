@@ -16,11 +16,7 @@ from utils import add_dropout, init_network
 import wandb
 
 
-
-
-
-
-def main_func(user, searched):
+def main_func(user, model_id):
     wandb_project = "Score_trail"
     parser = argparse.ArgumentParser(description='NAS Without Training')
     parser.add_argument('--data_loc', default='../cifardata/', type=str, help='dataset folder')
@@ -54,18 +50,11 @@ def main_func(user, searched):
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
-
-    def get_batch_jacobian(net, x, target, device, args=None):
-        net.zero_grad()
-        x.requires_grad_(True)
-        y, out = net(x)
-        y.backward(torch.ones_like(y))
-        jacob = x.grad.detach()
-        return jacob, target.detach(), y.detach(), out.detach()
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     savedataset = args.dataset
     dataset = 'fake' if 'fake' in args.dataset else args.dataset
+
     args.dataset = args.dataset.replace('fake', '')
     if args.dataset == 'cifar10':
         args.dataset = args.dataset + '-valid'
@@ -84,146 +73,82 @@ def main_func(user, searched):
         acc_type = 'x-test'
         val_acc_type = 'x-valid'
     scores = np.zeros(len(searchspace))
-    for i, (uid, network) in enumerate(searchspace):
-        if i == searched:
+    network = searchspace.get_network(model_id)
 
-            run_name = "User{}_model{}".format(user, i)
-            wandb.init(project=wandb_project, name = run_name)
-            if args.dropout:
-                add_dropout(network, args.sigma)
-            if args.init != '':
-                init_network(network, args.init)
-            # if 'hook_' in args.score:
-            #     network.K = np.zeros((args.batch_size, args.batch_size))
-            #     for name, module in network.named_modules():
-            #         if 'ReLU' in str(type(module)):
-            #             # hooks[name] = module.register_forward_hook(counting_hook)
-            #             module.register_forward_hook(counting_forward_hook)
-            #             module.register_backward_hook(counting_backward_hook)
-            #     # print('done')
-            network = network.to(device)
-            criterion = torch.nn.CrossEntropyLoss().to(device)
-            # optimizer = torch.optim.SGD(network.parameters(), lr=0.001)
-            optimizer = torch.optim.Adam(network.parameters(), lr=0.001)
-            random.seed(args.seed)
-            np.random.seed(args.seed)
-            torch.manual_seed(args.seed)
+    run_name = "User{}_model{}".format(user, model_id)
+    wandb.init(project=wandb_project, name = run_name)
+    if args.dropout:
+        add_dropout(network, args.sigma)
+    if args.init != '':
+        init_network(network, args.init)
+    # if 'hook_' in args.score:
+    #     network.K = np.zeros((args.batch_size, args.batch_size))
+    #     for name, module in network.named_modules():
+    #         if 'ReLU' in str(type(module)):
+    #             # hooks[name] = module.register_forward_hook(counting_hook)
+    #             module.register_forward_hook(counting_forward_hook)
+    #             module.register_backward_hook(counting_backward_hook)
+    #     # print('done')
+    network = network.to(device)
+    criterion = torch.nn.CrossEntropyLoss().to(device)
+    # optimizer = torch.optim.SGD(network.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(network.parameters(), lr=0.001)
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
 
-            for epoch in range(100):
+    for epoch in range(100):
 
-                test_acc = 0
-                test_num = 0
-                test_loss = 0
-                network.eval()
-                for batch_id, (images, labels) in enumerate(test_loader):
-                    images = images.to(device)
-                    labels = labels.to(device)
-                    pred = network(images)
-                    pred = pred[0]
-                    loss = criterion(pred, labels)
-                    test_acc += (torch.sum(torch.argmax(pred, dim=1) == labels)).item()
-                    test_num += labels.shape[0]
-                    test_loss += loss.item() * labels.shape[0]
+        test_acc = 0
+        test_num = 0
+        test_loss = 0
+        network.eval()
+        for batch_id, (images, labels) in enumerate(test_loader):
+            images = images.to(device)
+            labels = labels.to(device)
+            pred = network(images)
+            pred = pred[0]
+            loss = criterion(pred, labels)
+            test_acc += (torch.sum(torch.argmax(pred, dim=1) == labels)).item()
+            test_num += labels.shape[0]
+            test_loss += loss.item() * labels.shape[0]
 
-                print("current epoch: {}, test accuracy is {:.3f}, test loss is {:.3f}".format(epoch, test_acc/test_num, test_loss/test_num))
+        print("current epoch: {}, test accuracy is {:.3f}, test loss is {:.3f}".format(epoch, test_acc/test_num, test_loss/test_num))
 
-                train_acc = 0
-                train_num = 0
-                train_loss = 0
-                network.train()
-                for batch_id, (images, labels) in enumerate(train_loader):
-                    optimizer.zero_grad()
-                    images = images.to(device)
-                    labels = labels.to(device)
-                    pred = network(images)
-                    pred = pred[0]
-                    loss = criterion(pred, labels)
-                    loss.backward()
-                    optimizer.step()
-                    train_acc += (torch.sum(torch.argmax(pred, dim=1) == labels)).item()
-                    train_num += labels.shape[0]
-                    train_loss += loss.item() * labels.shape[0]
+        train_acc = 0
+        train_num = 0
+        train_loss = 0
+        network.train()
+        for batch_id, (images, labels) in enumerate(train_loader):
+            optimizer.zero_grad()
+            images = images.to(device)
+            labels = labels.to(device)
+            pred = network(images)
+            pred = pred[0]
+            loss = criterion(pred, labels)
+            loss.backward()
+            optimizer.step()
+            train_acc += (torch.sum(torch.argmax(pred, dim=1) == labels)).item()
+            train_num += labels.shape[0]
+            train_loss += loss.item() * labels.shape[0]
 
-                print(
-                    "current epoch: {}, the train accuracy is {:.3f}, train loss is {:.3f}".format(
-                        epoch, train_acc / train_num, train_loss / train_num))
-                info_dict = {
-                    "epoch": epoch,
-                    "train_acc": train_acc/train_num,
-                    "train_loss": train_loss/train_num,
-                    "test_acc": test_acc/test_num,
-                    "test_loss": test_loss/test_num
-                }
-                wandb.log(info_dict)
-            wandb.finish()
-            # torch.cuda.empty_cache()
-
-
-
-
-
-
-        # Reproducibility
-        # try:
-        #     if args.dropout:
-        #         add_dropout(network, args.sigma)
-        #     if args.init != '':
-        #         init_network(network, args.init)
-        #     if 'hook_' in args.score:
-        #         network.K = np.zeros((args.batch_size, args.batch_size))
-        #         def counting_forward_hook(module, inp, out):
-        #             try:
-        #                 if not module.visited_backwards:
-        #                     return
-        #                 if isinstance(inp, tuple):
-        #                     inp = inp[0]
-        #                 inp = inp.view(inp.size(0), -1)
-        #                 x = (inp > 0).float()
-        #                 K = x @ x.t()
-        #                 K2 = (1.-x) @ (1.-x.t())
-        #                 network.K = network.K + K.cpu().numpy() + K2.cpu().numpy()
-        #             except:
-        #                 pass
-        #         def counting_backward_hook(module, inp, out):
-        #             module.visited_backwards = True
-        #         for name, module in network.named_modules():
-        #             if 'ReLU' in str(type(module)):
-        #                 #hooks[name] = module.register_forward_hook(counting_hook)
-        #                 module.register_forward_hook(counting_forward_hook)
-        #                 module.register_backward_hook(counting_backward_hook)
-        #         # print('done')
-        #     network = network.to(device)
-        #     random.seed(args.seed)
-        #     np.random.seed(args.seed)
-        #     torch.manual_seed(args.seed)
-        #     s = []
-        #     for j in range(args.maxofn):
-        #         data_iterator = iter(train_loader)
-        #         x, target = next(data_iterator)
-        #         x2 = torch.clone(x)
-        #         x2 = x2.to(device)
-        #         x, target = x.to(device), target.to(device)
-        #         jacobs, labels, y, out = get_batch_jacobian(network, x, target, device, args)
-        #         if 'hook_' in args.score:
-        #             network(x2.to(device))
-        #             s.append(get_score_func(args.score)(network.K, target))
-        #         else:
-        #             s.append(get_score_func(args.score)(jacobs, labels))
-        #     scores[i] = np.mean(s)
-        #     accs[i] = searchspace.get_final_accuracy(uid, acc_type, args.trainval)
-        #     accs_ = accs[~np.isnan(scores)]
-        #     scores_ = scores[~np.isnan(scores)]
-        #     numnan = np.isnan(scores).sum()
-        #     tau, p = stats.kendalltau(accs_[:max(i-numnan, 1)], scores_[:max(i-numnan, 1)])
-        #     print(f'{tau}, {i}/{len(searchspace)}')
-        # except Exception as e:
-        #     print(e)
-        #     accs[i] = searchspace.get_final_accuracy(uid, acc_type, args.trainval)
-        #     scores[i] = np.nan
+        print(
+            "current epoch: {}, the train accuracy is {:.3f}, train loss is {:.3f}".format(
+                epoch, train_acc / train_num, train_loss / train_num))
+        info_dict = {
+            "epoch": epoch,
+            "train_acc": train_acc/train_num,
+            "train_loss": train_loss/train_num,
+            "test_acc": test_acc/test_num,
+            "test_loss": test_loss/test_num
+        }
+        wandb.log(info_dict)
+    wandb.finish()
 
 if __name__ == '__main__':
-    user_list = [1, 2, 3, 4]
-    searched = [1,3]
+    user_list = [0, 1,2,3,4]
+    searched = [0, 2, 4, 15128, 14417, 13700, 13717]
     for user in user_list:
-        main_func(user, searched[0])
-        main_func(user, searched[1])
+        for model in searched:
+            main_func(user, model)
+        # main_func(user, searched[1])
